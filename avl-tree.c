@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+#include <omp.h>
 typedef enum{FALSE, TRUE} Bool;
 
 /*Node struct with its members.*/
@@ -13,58 +14,58 @@ struct node
 };
 
 /*Function which searches in a binary tree for a value (data), given a root Node.*/
+//   Parallel version   //
 struct node* search(struct node *root, int data){
-	Bool found = FALSE;
-	struct node *currNode = root;
+	struct node *foundNode = NULL;
+	if(root != NULL){
+		if(data == root -> val){
+			foundNode = root;
+		}
+		else if(data < root -> val){
+			#pragma omp task shared(foundNode)
+			{
+				struct node *leftChildNode;
+				leftChildNode = search(root -> left_child, data);
+				if(leftChildNode != NULL){
+					#pragma omp atomic write
+						foundNode = leftChildNode;
+					#pragma omp cancel taskgroup
+				}// end if leftChildNode found
+			}//end pragma
+		}//end if for left side of subtree
+		else if(data > root -> val){
+			#pragma omp task shared(foundNode)
+			{
+				struct node *rightChildNode;
+				rightChildNode = search(root -> right_child, data);
+				if(rightChildNode != NULL){
+					#pragma omp atomic write
+						foundNode = rightChildNode;
+					#pragma omp cancel taskgroup
+				}// end if rightChildNode found
+			}//end pragma
+		}//end if for right side of subtree
+	}// end if root is not NULL
+	return(foundNode);
+}//end parallel search
 
-	/*
-	while(!found && currNode != NULL){
+/*Function which searches in a binary tree for a value (data), given a root Node.*/
+//   Sequential version   //
+/*struct node* sequentialSearch(struct node *root, int data){
+	if(currNode != NULL){
 		if(data < currNode -> val){
-			currNode = currNode -> left_child;
+			currNode = sequentialSearch(currNode -> left_child, data);
 		}
 		else if(data > currNode -> val){
-			currNode = currNode -> right_child;
-		}
-		else if(data == currNode -> val){
-			found = TRUE;
-		}
-		else{
-			currNode = NULL;
-		}
-	}*/
-
-
-	if(currNode != NULL){
-		if(currNode -> val < data){
-			currNode = search(currNode -> left_child, data);
-		}
-		else if(currNode -> val > data){
-			currNode = search(currNode -> right_child, data);
+			currNode = sequentialSearch(currNode -> right_child, data);
 		}
 		else if(currNode -> val != data){
 			currNode = NULL;
 		}
 	}
-
-	/*
-	while(currNode != NULL && !found){
-		if(currNode -> val != data){
-			if(data < currNode -> val && currNode -> left_child != NULL){
-				currNode = search(currNode -> left_child, data);
-			}
-			else if(data > currNode -> val && currNode -> right_child != NULL){
-				currNode = search(currNode -> right_child, data);
-			}
-		} else {
-			found = TRUE;
-			break;
-		}
-	}
-	*/
 	return(currNode);
 }
-
-
+*/
 
 struct node* create(int quantity){
 	struct node *insert (int data, struct node *ptr, int *ht_inc);
@@ -90,29 +91,26 @@ struct node* create(int quantity){
 	return root;
 }
 
-Bool searchFound(struct node *root, int data){
+double searchFound(struct node *root, int data){
+	double elapsed = -1.0;
     struct node *someNode = (struct node *) malloc(sizeof(struct node));
     /*Time*/
     clock_t start = clock();
     someNode = search(root, data);
     clock_t stop = clock();
     /*Time*/
-    Bool result;
+    //Bool result;
 		if(someNode != NULL){
     	if(someNode->val == data){
-        	result = TRUE;
-        	double elapsed = (double)(stop - start) / CLOCKS_PER_SEC;
+        	//result = TRUE;
+        	elapsed = (double)(stop - start) / CLOCKS_PER_SEC;
         	printf("Time elapsed in ms: %f \n", elapsed);
-        	FILE* fichero;
-        	fichero = fopen("data.txt", "a");
-        	fprintf (fichero, "%lf%s%d \n", elapsed, " ",data);
-        	fclose(fichero);
     	}
 	}
-	else{
-        result = FALSE;
-    }
-    return result;
+	//else{
+        //result = FALSE;
+    //}
+    return elapsed;
 }
 
 /*Function which inserts in a binary tree and Balance.*/
@@ -244,7 +242,8 @@ int main(void){
     int ht_inc;
     int data ;
     int option;
-		int quantity;
+		int quantity = 0;
+		double elapsed;
     struct node *root = (struct node *)malloc(sizeof(struct node));
     root = NULL;
     while(1){
@@ -280,8 +279,12 @@ int main(void){
             case 3:
                 printf("Enter the value to be search : ");
                 scanf("%d", &data);
-                printf("%d",searchFound(root, data));
+								elapsed = searchFound(root, data);
                 printf("\n");
+								FILE* fichero;
+								fichero = fopen("data.txt", "a");
+								fprintf (fichero, "%lf%s%d \n", elapsed, " ",quantity);
+								fclose(fichero);
                 break;
 						case 4:
 								printf("Enter the quantity to be inserted : ");
